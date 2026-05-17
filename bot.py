@@ -1,9 +1,10 @@
 from flask import Flask, request
 import requests
+import os
 import sqlite3
 from datetime import datetime
 
-tik = "8661662390:AAGruf9j6lWECg0ftIOo_Gbr_18MVbkWVew"
+tik = os.getenv("BOT_TOKEN")
 
 app = Flask(__name__)
 
