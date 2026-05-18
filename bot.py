@@ -1,8 +1,8 @@
 from flask import Flask, request
 import requests
-import os
 import sqlite3
 from datetime import datetime
+import os
 
 tik = os.getenv("BOT_TOKEN")
 
@@ -10,6 +10,7 @@ app = Flask(__name__)
 
 
 def reply_message(chat_id, reply):
+
     url = f"https://api.telegram.org/bot{tik}/sendMessage"
 
     requests.post(url, json={
@@ -25,6 +26,7 @@ cursor = conn.cursor()
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS log_trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id INTEGER,
     date TEXT,
     pair TEXT,
     day TEXT,
@@ -41,6 +43,7 @@ conn.close()
 
 @app.route(f"/{tik}", methods=["POST"])
 def journal():
+
     data = request.get_json()
 
     message = data.get("message")
@@ -74,7 +77,10 @@ def journal():
         conn = sqlite3.connect("Trade_journal.db")
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM log_trades")
+        cursor.execute(
+            "SELECT * FROM log_trades WHERE chat_id = ?",
+            (chat_id,)
+        )
 
         data = cursor.fetchall()
         reply_message(chat_id, f"📊 Total Trades: {len(data)}\n")
@@ -85,16 +91,18 @@ def journal():
                 "📭 No trades found yet.\n\nStart journaling your trades to build your trading history."
             )
         for index, row in enumerate(data, start=1):
-            trade_id, date, pair, day, tp, sl, result, duration = row
+            trade_id, chat_id, date, pair, day, tp, sl, result, duration = row
 
             status = "🟢 WIN" if result.upper() == "WIN" else "🔴 LOSS"
             reply = (
                 f"📊 Trade #{index}\n\n"
                 f"📅 Date: {date}\n"
                 f"💱 Pair: {pair}\n"
-                f"📆 Day: {day}\n"
-                f"🎯 TP: {tp}\n"
-                f"🛑 SL: {sl}\n"
+                f"📆 Day: {day}\n\n"
+
+                f"🟢 TP: +{tp}%\n"
+                f"🔴 SL: -{sl}%\n\n"
+
                 f"⏱ Duration: {duration}\n"
                 f"📈 Result: {status}\n"
             )
@@ -117,17 +125,17 @@ def journal():
             "BTCUSDT Monday 120 50 WIN 2h\n\n"
 
             "📖 Meaning:\n"
-            "• Pair → Trading pair\n"
-            "• Day → Trade day\n"
-            "• TP → Take Profit\n"
-            "• SL → Stop Loss\n"
-            "• Result → WIN or LOSS\n"
-            "• Duration → Trade holding time\n\n"
-
-            "⏱ Examples:\n"
-            "• 15m → 15 minutes\n"
-            "• 2h → 2 hours\n"
-            "• 1d → 1 day"
+                "• Pair → Trading pair\n"
+                "• Day → Trade day\n"
+                "• TP → Take Profit\n"
+                "• SL → Stop Loss\n"
+                "• Result → WIN or LOSS\n"
+                "• Duration → Trade holding time\n\n"
+                
+                "⏱ Examples:\n"
+                "• 15m → 15 minutes\n"
+                "• 2h → 2 hours\n"
+                "• 1d → 1 day"
         )
         reply_message(chat_id, reply)
     else:
@@ -155,9 +163,9 @@ def journal():
 
             cursor.execute("""
             INSERT INTO log_trades
-            (date, pair, day, take_profit, stop_loss, result, duration)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (now, pair, day, tp, sl, res, duration))
+            (chat_id, date, pair, day, take_profit, stop_loss, result, duration)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (chat_id, now, pair, day, tp, sl, res, duration))
 
             conn.commit()
             conn.close()
@@ -185,7 +193,7 @@ def journal():
                 "⚠️ Invalid TP or SL value.\n\n"
                 "Take Profit and Stop Loss must be numeric values.\n\n"
                 "✅ Example:\n"
-                "BTCUSDT Monday 120 50 WIN"
+                "BTCUSDT Monday 120 50 WIN 2h"
             )
     return "ok"
 
