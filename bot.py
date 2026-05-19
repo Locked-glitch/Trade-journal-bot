@@ -1,11 +1,11 @@
 from flask import Flask, request
 import requests
-import sqlite3
+import psycopg2
 from datetime import datetime
 import os
 
 tik = os.getenv("BOT_TOKEN")
-
+DATABASE_URL = os.getenv("DATABASE_URL")
 app = Flask(__name__)
 
 
@@ -20,26 +20,28 @@ def reply_message(chat_id, reply):
 
 
 # CREATE DATABASE
-conn = sqlite3.connect("Trade_journal.db")
-cursor = conn.cursor()
+def init_db():
+    conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+    cursor = conn.cursor()
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS log_trades (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id INTEGER,
-    date TEXT,
-    pair TEXT,
-    day TEXT,
-    take_profit REAL,
-    stop_loss REAL,
-    result TEXT,
-    duration TEXT
-)
-""")
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS log_trades (
+        id SERIAL PRIMARY KEY,
+        chat_id BIGINT,
+        date TEXT,
+        pair TEXT,
+        day TEXT,
+        take_profit REAL,
+        stop_loss REAL,
+        result TEXT,
+        duration TEXT
+    )
+    """)
 
-conn.commit()
-conn.close()
+    conn.commit()
+    conn.close()
 
+init_db()
 
 @app.route(f"/{tik}", methods=["POST"])
 def journal():
@@ -74,11 +76,11 @@ def journal():
         reply_message(chat_id, reply)
 
     elif text == "/dashboard":
-        conn = sqlite3.connect("Trade_journal.db")
+        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT * FROM log_trades WHERE chat_id = ?",
+            "SELECT * FROM log_trades WHERE chat_id = %s",
             (chat_id,)
         )
 
@@ -91,7 +93,7 @@ def journal():
                 "📭 No trades found yet.\n\nStart journaling your trades to build your trading history."
             )
         for index, row in enumerate(data, start=1):
-            trade_id, chat_id, date, pair, day, tp, sl, result, duration = row
+            trade_id, user_chat_id, date, pair, day, tp, sl, result, duration = row
 
             status = "🟢 WIN" if result.upper() == "WIN" else "🔴 LOSS"
             reply = (
@@ -107,6 +109,7 @@ def journal():
                 f"📈 Result: {status}\n"
             )
             reply_message(chat_id, reply)
+            
     elif text == "/help":
         reply = (
             "🛠 Trade Journal Help Center\n\n"
@@ -158,13 +161,13 @@ def journal():
             now = datetime.now().strftime("%Y-%m-%d")
 
             # NEW CONNECTION EACH REQUEST
-            conn = sqlite3.connect("Trade_journal.db")
+            conn = psycopg2.connect(os.getenv("DATABASE_URL"))
             cursor = conn.cursor()
 
             cursor.execute("""
             INSERT INTO log_trades
             (chat_id, date, pair, day, take_profit, stop_loss, result, duration)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (chat_id, now, pair, day, tp, sl, res, duration))
 
             conn.commit()
